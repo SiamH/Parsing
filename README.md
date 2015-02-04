@@ -20,3 +20,5 @@ For each of the URLs above:
 - The "dyno" that responded the most.
 
 The output should just be simple text lines(Result.txt). Note that we want aggregate data for all users, not stats on specific users.
+
+use command line like "node main.js GET count_pending_messages".
