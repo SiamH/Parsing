@@ -1,5 +1,56 @@
-// Load the fs (filesystem) module
+var args = process.argv.slice(2);
+
+var CmdMethod = null;
+var CmdUrlPath = null;
+
+if (args.length > 0)
+    CmdMethod = args[0];
+if (args.length > 1)
+    CmdUrlPath = args[1];
+
+var sOutputFile = 'Result.txt';
+
 var fs = require('fs');
+
+var vIsGetmethod = false;
+var vIsPostmethod = false;
+if (CmdMethod !== null)
+{
+    vIsGetmethod = (CmdMethod.search('GET') !== -1);
+    vIsPostmethod = (CmdMethod.search('POST') !== -1)
+}
+
+if (CmdMethod === null || (vIsGetmethod === false && vIsPostmethod === false))
+{
+    var sError = "Invalid method "  + CmdMethod;
+    fs.writeFile(sOutputFile, sError, function(err)
+    {
+        console.log("Writing Successful to Ouput file.");
+    });
+    return;   
+}
+
+var vUrlParm = null;
+if (CmdUrlPath !== null)
+{
+    if (CmdUrlPath.search('count_pending_messages') !== -1)
+        vUrlParm = 'count_pending_messages';
+    else if (CmdUrlPath.search('get_messages') !== -1)
+         vUrlParm = 'get_messages';
+    else if (CmdUrlPath.search('get_friends_progress') !== -1)
+         vUrlParm = 'get_friends_progress';
+    else if (CmdUrlPath.search('get_friends_score') !== -1)
+         vUrlParm = 'get_friends_score';
+    else
+    {
+        var sError = "Invalid Url path "  + Cmdmethod;
+        fs.writeFile(sOutputFile, sError, function(err)
+        {
+            console.log("Writing error");
+        });
+        return;
+    }
+}
 
 // Read the contents of the file into memory.
 fs.readFile('Example.txt', function (err, logData) {
@@ -10,43 +61,19 @@ fs.readFile('Example.txt', function (err, logData) {
   
 // logData is a Buffer, convert to string.
   var text = logData.toString();
-  var searchurlparms = 
-  [
-      'count_pending_messages',
-      'get_messages',
-      'get_friends_progress',
-      'get_friends_score',
-      ' ',
-  ];
   
-  var searchUrl = 
-  {
-      'GET': searchurlparms,
-      'POST' : ' ',
-  };
-  
-  var results = {};
-
-  var TextToSplit = 'bytes=';
+  var TextToSplit = /(bytes=\d+)/;
   
 // Break up the file into lines.
   var lines = text.split(TextToSplit);
   
   var MaxDyno = -1000;
   
-  var searchDynoExpr = /( Dyno=web.\d+)/;
+  var searchDynoExpr = /( Dyno=web.\d+)/gi;
   var connectTimeExpr = /(connect=\d+)/g;
   var serviceTimeExpr = /(service=\d+)/g;
   
-  var MethodGETWithTagExpr = /(method=GET path=\/api\/users\/[0-9]+\/[A-Z|_]+)/gi;
-  var MethodGETWithoutTagExpr = /(method=GET path=\/api\/users\/[0-9]+)/gi;
-  var MethodPOSTExpr = /(method=POST path=\/api\/users\/[0-9]+)/gi;
-  
-  var vLastpartForGet = /([A-Z|_]+)/gi;
-  
   var vURLFreq = {};
-  var vPosturlname = 'POST /api/users/{user_id}';
-  var vGeturlname = 'GET /api/users/{user_id}';
   
   var responseAll = [];
   var Totalresponse = 0;
@@ -54,41 +81,43 @@ fs.readFile('Example.txt', function (err, logData) {
   var responsefreq = [];
   
   var vModefreq = 0;
- 
-      
-  lines.forEach(function(line) {
-        var IsGetMethodWithTag = line.match(MethodGETWithTagExpr);
-        var IsGetMethodWithoutTag = line.match(MethodGETWithoutTagExpr);
-        var IsPostMethod = line.match(MethodPOSTExpr);
-        
-        var vUrlName = '';
-        if (IsPostMethod !== null) 
-            vUrlName = vPosturlname;
-        else if (IsGetMethodWithTag !== null)
-        {
-            UrllastPeak = IsGetMethodWithTag.toString().match(vLastpartForGet)[5]; 
-            console.log(UrllastPeak);
-            if (UrllastPeak.toString() in searchurlparms)
-                vUrlName = vGeturlname + '/' + urllastPeak;
-        }
-        else if (IsGetMethodWithoutTag !== null)
-            vUrlName = vGeturlname;
-        
-        if (vUrlName !== '')
-        {
-            if(!vURLFreq[vUrlName]) {
-                vURLFreq[vUrlName] = 1;
-            }
-            else
-                vURLFreq[vUrlName] = ++vURLFreq[vUrlName];
-        }
-        
-        //console.log(vURLFreq);
-        
+  
+  var MethodExpr = 'method=';
+  var vUrlName;
+  if (vIsGetmethod)
+  {
+     MethodExpr = MethodExpr + "GET ";
+     vUrlName = 'GET /api/users/{user_id}';
+  }
+  else
+  {
+     MethodExpr = MethodExpr + "POST ";
+     vUrlName = 'POST /api/users/{user_id}';
+  }
+     
+  var PathExpr = 'path=\/api\/users\/[0-9]+';
+  if (vUrlParm !== null)
+  {
+    vUrlName = vUrlName + '\/' + vUrlParm;
+    PathExpr =  PathExpr + '\/' + vUrlParm;
+  }
+  else
+    PathExpr = PathExpr + ' ';
+  
+   PathExpr = MethodExpr + PathExpr ;
+   
+   var results = {};
+   
+   var vOccurence = 0;
+   lines.forEach(function(line) {
+      var vResult = line.match(PathExpr);
+      if (vResult !== null)
+      {
+        vOccurence++;
         var Dyno = line.match(searchDynoExpr);
         if (Dyno !== null)
         {
-            var DynoNum = Dyno.toString().split('Dyno=web.')[1];
+            var DynoNum = Dyno.toString().split('dyno=web.')[1];
             
             if(!results[DynoNum]) {
                 results[DynoNum] = 1;
@@ -119,39 +148,55 @@ fs.readFile('Example.txt', function (err, logData) {
             if (vModefreq === 0 || responsefreq[vModefreq] < responsefreq[response])
                 vModefreq = response;
         }
+      }
     });
     
-    console.log(vURLFreq);
-    
-    var vMeanResponse = Totalresponse / responseAll.length;
-    console.log("Mean response time:");
-    console.log(vMeanResponse);
-    
-    responseAll.sort();
-    var MiddlePos = Math.floor(responseAll.length / 2);
-    var vMedianPos = responseAll[MiddlePos];
-    if (responseAll.length % 2 === 0)
+    if (vOccurence > 0)
     {
-       var nextPos = MiddlePos + 1;
-       vMedianPos = (vMedianPos + responseAll[nextPos]) / 2;
-    }
-    
-    console.log("Median response time:");   
-    console.log(vMedianPos);
-    
-    console.log("Mode response time:");
-    console.log(vModefreq);
-    
-    Object.keys(results).forEach(function(key){
-        var v = results[key];
-        if (v === MaxDyno)
+        var sLog = "Frequency of URL " + vUrlName + ": " + vOccurence;
+        sLog = sLog + '\n';
+        
+        var vMeanResponse = Totalresponse / responseAll.length;
+        sLog = sLog + "Mean response time: " + vMeanResponse;
+        sLog = sLog + '\n';
+        
+        responseAll.sort();
+        var MiddlePos = Math.floor(responseAll.length / 2);
+        var vMedianVal = responseAll[MiddlePos];
+        if (responseAll.length % 2 === 0)
         {
-           console.log("Maximum responded dyno");
-           console.log("web." + key.split(',')[0]);
+           var nextPos = MiddlePos + 1;
+           if (nextPos == responseAll.length)
+                nextPos = MiddlePos - 1;
+                
+           vMedianVal = (vMedianVal + responseAll[nextPos]) / 2;
         }
+        
+        sLog = sLog + "Median response time: " + vMedianVal;
+        sLog = sLog + '\n';
+        
+        sLog = sLog + "Mode response time: " + vModefreq;
+        sLog = sLog + '\n';
+        
+        sLog = sLog + "Maximum responded dyno: ";
+        Object.keys(results).forEach(function(key){
+            var v = results[key];
+            if (v === MaxDyno)
+               sLog = sLog + "web." + key.split(',')[0];
+        });
+        
+    fs.writeFile(sOutputFile, sLog, function(err)
+    {
+        console.log("Writing Successful to Output file");
     });
     
+    }
 });
+
+
+
+
+
 
 
 
